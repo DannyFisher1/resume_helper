@@ -8,6 +8,7 @@ export default function Home() {
   const [isOllamaConnected, setIsOllamaConnected] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'upload' | 'grade' | 'optimize' | 'match'>('upload');
+  const [isUploading, setIsUploading] = useState(false);
   
   const {
     currentResume,
@@ -44,23 +45,61 @@ export default function Home() {
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        const resume = {
-          id: Date.now().toString(),
-          name: file.name,
-          content,
-          uploadedAt: new Date(),
-          lastModified: new Date(),
-        };
-        setCurrentResume(resume);
-        setActiveTab('grade');
-      };
-      reader.readAsText(file);
+      setIsUploading(true);
+      
+      try {
+        // For text files, read directly
+        if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const content = e.target?.result as string;
+            const resume = {
+              id: Date.now().toString(),
+              name: file.name,
+              content,
+              uploadedAt: new Date(),
+              lastModified: new Date(),
+            };
+            setCurrentResume(resume);
+            setActiveTab('grade');
+            setIsUploading(false);
+          };
+          reader.readAsText(file);
+        } else {
+          // For other file types (PDF, DOC, DOCX), use the API
+          const formData = new FormData();
+          formData.append('file', file);
+          
+          const response = await fetch('/api/file/parse', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            const resume = {
+              id: Date.now().toString(),
+              name: file.name,
+              content: result.content,
+              uploadedAt: new Date(),
+              lastModified: new Date(),
+            };
+            setCurrentResume(resume);
+            setActiveTab('grade');
+          } else {
+            const error = await response.json();
+            alert(`Error parsing file: ${error.error}`);
+          }
+          setIsUploading(false);
+        }
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        alert('Error uploading file. Please try again.');
+        setIsUploading(false);
+      }
     }
   };
 
@@ -208,20 +247,28 @@ export default function Home() {
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
                 <FileText size={48} className="mx-auto mb-4 text-gray-400" />
                 <p className="text-gray-600 mb-4">
-                  Upload your resume in text format (.txt, .md)
+                  Upload your resume in supported formats
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Supported formats: PDF, DOC, DOCX, TXT, MD
                 </p>
                 <input
                   type="file"
-                  accept=".txt,.md"
+                  accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
                   onChange={handleFileUpload}
                   className="hidden"
                   id="resume-upload"
+                  disabled={isUploading}
                 />
                 <label
                   htmlFor="resume-upload"
-                  className="bg-blue-500 text-white px-6 py-3 rounded-lg cursor-pointer hover:bg-blue-600 transition-colors inline-block"
+                  className={`px-6 py-3 rounded-lg cursor-pointer transition-colors inline-block ${
+                    isUploading 
+                      ? 'bg-gray-400 text-white cursor-not-allowed' 
+                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                  }`}
                 >
-                  Choose File
+                  {isUploading ? 'Processing...' : 'Choose File'}
                 </label>
               </div>
               

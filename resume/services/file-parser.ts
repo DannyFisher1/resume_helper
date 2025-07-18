@@ -1,4 +1,3 @@
-import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 
 export interface ParsedFile {
@@ -95,6 +94,8 @@ export class FileParserService {
 
   private async parsePDFBuffer(buffer: Buffer): Promise<ParsedFile> {
     try {
+      // Dynamic import to avoid build issues
+      const pdf = (await import('pdf-parse')).default;
       const data = await pdf(buffer);
       
       return {
